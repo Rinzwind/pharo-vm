@@ -206,6 +206,34 @@ OSStatus sqSetupSSL(sqSSL* ssl, int isServer)
         }
     }
 
+    if (ssl->certName) {
+        CFStringRef certName = CFStringCreateWithCString(kCFAllocatorDefault, ssl->certName, kCFStringEncodingASCII);
+        if (certName == NULL)
+            return SQSSL_GENERIC_ERROR;
+        CFMutableDictionaryRef query = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(query, kSecMatchLimit, kSecMatchLimitOne);
+        CFDictionarySetValue(query, kSecReturnRef, kCFBooleanTrue);
+        CFDictionarySetValue(query, kSecClass, kSecClassIdentity);
+        CFDictionarySetValue(query, kSecMatchSubjectWholeString, certName);
+        CFDictionarySetValue(query, kSecMatchValidOnDate, kCFNull);
+        CFRelease(certName);
+        SecIdentityRef identity;
+        status = SecItemCopyMatching(query, (CFTypeRef*) &identity);
+        CFRelease(query);
+        if (status != noErr) {
+            logStatus(status, status == errSecItemNotFound ? "SecItemCopyMatching had no results" : "SecItemCopyMatching failed");
+            return status;
+        }
+        CFArrayRef certs = CFArrayCreate(kCFAllocatorDefault, (const void **)&identity, 1, &kCFTypeArrayCallBacks);
+        CFRelease(identity);
+        SSLSetCertificate(ssl->ctx, certs);
+        CFRelease(certs);
+        if (status != noErr) {
+            logStatus(status, "SSLSetCertificate failed");
+            return status;
+        }
+    }
+
     return status;
 }
 
